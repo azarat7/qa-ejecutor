@@ -1,0 +1,33 @@
+# Dependabot: revisa cada semana las librerías de Python (pyproject.toml) y las acciones de GitHub Actions.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "America/Guatemala"
+    cooldown:
+      default-days: 7
+    groups:
+      librerias:
+        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "America/Guatemala"
+    cooldown:
+      default-days: 7
+    groups:
+      acciones:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"

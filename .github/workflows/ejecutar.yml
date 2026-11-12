@@ -1,0 +1,108 @@
+# Flujo reutilizable (ADR-008): ejecuta las pruebas de la Sub Test Execution abierta de una historia y envía los
+# resultados a xray-proxy. Cada proyecto lo llama desde su .github/workflows/pruebas-e2e.yml (ver README).
+name: Ejecutar pruebas de Xray
+
+on:
+  workflow_call:
+    inputs:
+      historia:
+        description: "Historia de Jira, por ejemplo QAPEC-3"
+        required: true
+        type: string
+      version:
+        description: "Versión de qa-ejecutor (etiqueta, por ejemplo v0.1.0)"
+        required: true
+        type: string
+      url:
+        description: "Dirección de la aplicación que se prueba"
+        required: true
+        type: string
+      xray-proxy-url:
+        description: "Dirección de xray-proxy"
+        required: true
+        type: string
+      pasos:
+        description: "Paquete de Python con los pasos del proyecto"
+        required: false
+        type: string
+        default: "e2e.pasos"
+      requisitos:
+        description: "Archivo con las dependencias propias de los pasos (opcional)"
+        required: false
+        type: string
+        default: ""
+      imagen:
+        description: "Imagen de Playwright (su versión debe coincidir con la de qa-ejecutor)"
+        required: false
+        type: string
+        default: "mcr.microsoft.com/playwright/python:v1.63.0-noble"
+      repositorio-ejecutor:
+        description: "Repositorio de qa-ejecutor en GitHub"
+        required: false
+        type: string
+        default: "azarat7/qa-ejecutor"
+      minutos:
+        description: "Tiempo máximo de la ejecución"
+        required: false
+        type: number
+        default: 30
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    # Imagen oficial de Playwright: Chromium y sus librerías ya instalados, tiempo estable (D-64).
+    container:
+      image: ${{ inputs.imagen }}
+      options: --user 1001
+    timeout-minutes: ${{ inputs.minutos }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      HISTORIA: ${{ inputs.historia }}
+      VERSION: ${{ inputs.version }}
+      REPOSITORIO: ${{ inputs.repositorio-ejecutor }}
+      PASOS: ${{ inputs.pasos }}
+      REQUISITOS: ${{ inputs.requisitos }}
+      APP_URL: ${{ inputs.url }}
+      XRAY_PROXY_URL: ${{ inputs.xray-proxy-url }}
+    steps:
+      - name: Validar los datos de entrada
+        run: |
+          [[ "$HISTORIA" =~ ^[A-Z][A-Z0-9]*-[0-9]+$ ]] || { echo "::error::Historia inválida: $HISTORIA"; exit 1; }
+          [[ "$VERSION" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::Versión inválida: $VERSION"; exit 1; }
+          [[ "$REPOSITORIO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "::error::Repositorio inválido"; exit 1; }
+          [[ "$PASOS" =~ ^[A-Za-z_][A-Za-z0-9_.]*$ ]] || { echo "::error::Paquete de pasos inválido: $PASOS"; exit 1; }
+
+      # El repositorio del proyecto (el que llama a este flujo): sus pasos y sus dependencias.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Se usa el Python de la imagen: actions/setup-python no funciona dentro de un contenedor.
+      # qa-ejecutor se instala desde el archivo de su versión en GitHub (no hace falta git en la imagen).
+      - name: Instalar qa-ejecutor y las dependencias del proyecto
+        run: |
+          python3 -m pip install --user --break-system-packages "qa-ejecutor @ https://github.com/${REPOSITORIO}/archive/${VERSION}.tar.gz"
+          if [[ -n "$REQUISITOS" ]]; then python3 -m pip install --user --break-system-packages -r "$REQUISITOS"; fi
+
+      # Los secretos del proyecto (secrets: inherit) pasan como variables de entorno a los pasos siguientes de este
+      # trabajo: así los pasos de cada proyecto leen los suyos (por ejemplo CLAVE_DEMO) sin que este flujo los nombre.
+      # GitHub los oculta en los registros.
+      - name: Secretos del proyecto como variables de entorno
+        env:
+          SECRETOS: ${{ toJSON(secrets) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, secrets
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              for nombre, valor in json.loads(os.environ["SECRETOS"]).items():
+                  if nombre.lower() == "github_token" or not nombre.isidentifier():
+                      continue
+                  fin = f"FIN_{secrets.token_hex(8)}"
+                  env.write(f"{nombre}<<{fin}\n{valor}\n{fin}\n")
+          PY
+
+      - name: Ejecutar las pruebas y enviar los resultados a xray-proxy
+        run: python3 -m qa_ejecutor --historia "$HISTORIA" --pasos "$PASOS" --url "$APP_URL" --xray-proxy "$XRAY_PROXY_URL"

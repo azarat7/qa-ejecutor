@@ -1,0 +1,5 @@
+# Finales de línea: LF en el repositorio y en las copias de Windows (como xray-proxy y portal-estados-demo).
+* text=auto eol=lf
+
+*.png binary
+*.zip binary
