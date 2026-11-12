@@ -14,6 +14,10 @@ updates:
       librerias:
         update-types: ["minor", "patch"]
     open-pull-requests-limit: 5
+    # Playwright va atada a la imagen del flujo (mcr.microsoft.com/playwright/python:vX-noble): se actualizan las dos
+    # juntas, a mano, en un solo Pull Request (pyproject.toml y la entrada "imagen" de ejecutar.yml).
+    ignore:
+      - dependency-name: "playwright"
     commit-message:
       prefix: "chore(deps)"
 
