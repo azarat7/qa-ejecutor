@@ -10,14 +10,14 @@ readme = "README.md"
 requires-python = ">=3.10"
 # Versiones fijas: la de Playwright coincide con la imagen oficial que usa el flujo reutilizable.
 dependencies = [
-    "playwright==1.63.0",
+    "playwright==1.64.1",
     "pytest==9.2.0",
     "pytest-bdd==9.0.1",
     "requests==2.34.2",
 ]
 
 [project.optional-dependencies]
-dev = ["ruff==0.17.2"]
+dev = ["ruff==0.17.3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
