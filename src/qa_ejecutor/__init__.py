@@ -7,4 +7,4 @@ qa-ejecutor: ejecuta en GitHub Actions las pruebas Cucumber que QA programó en 
 4. Arma el ZIP de resultados con el formato que ya recibe xray-proxy (paquete.py) y lo envía (envio.py).
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
