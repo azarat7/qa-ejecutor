@@ -17,7 +17,7 @@ def test_zip_con_manifest_resultados_y_evidencias(tmp_path):
         assert sorted(zf.namelist()) == ["evidencias/a.png", "manifest.json", "resultados.json"]
         m = json.loads(zf.read("manifest.json"))
         assert (m["tipo"], m["historia"], m["proyecto"], m["run_id"]) == ("resultados", "DEMO-3", "DEMO", "bdd-20261112-1000-demo3")
-        assert m["version_prompt"] == "qa-ejecutor@0.1.0"
+        assert m["version_prompt"] == "qa-ejecutor@0.1.1"
         tests = json.loads(zf.read("resultados.json"))["tests"]
         assert tests[0]["evidencias"] == ["a.png"]
         assert tests[1]["steps"][0]["evidencias"] == []

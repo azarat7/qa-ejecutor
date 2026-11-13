@@ -6,6 +6,16 @@ Plugin de pytest que recoge el resultado de cada prueba Cucumber para el paquete
 - Un paso que falla deja el ejemplo en FAILED, con el paso y el motivo en el comentario.
 - Un paso sin código deja la prueba en TODO, con el texto del paso que falta: no es un defecto del producto.
 - Captura de pantalla al final de cada ejemplo y en el momento de cada falla, si el escenario usó la página.
+
+Comentario de cada prueba: el formato que lee xray-proxy para proponer los Errores y las fallas con la misma causa.
+Cada ejemplo en su línea, entre corchetes, y debajo un renglón por paso ejecutado, sin la palabra clave de Gherkin:
+
+    [Auditoría Interna]
+      OK    un usuario activo con rol "Auditoría Interna"
+      OK    ingresa usuario y contraseña válidos
+      FALLA accede al portal -> sigue en la pantalla de inicio de sesión
+
+Lo que va después de "->" es lo obtenido, en un solo renglón: dos pruebas que obtienen lo mismo tienen el mismo síntoma.
 """
 import datetime as dt
 import logging
@@ -20,6 +30,7 @@ from qa_ejecutor.gherkin import identificador
 logger = logging.getLogger(__name__)
 FORMATO_HORA = "%Y-%m-%dT%H:%M:%S+00:00"
 ESCENARIO = "escenario"
+MAX_MOTIVO = 300
 
 
 def ahora():
@@ -39,6 +50,26 @@ def fila_de(item):
     return " | ".join(str(v) for v in ejemplo.values())
 
 
+def motivo_de(excepcion):
+    """
+    Lo obtenido en una falla, en un solo renglón. De una verificación (assert) queda su mensaje, sin el nombre de la
+    excepción ni la explicación que agrega pytest: así dos pasos que obtienen lo mismo dejan el mismo texto. De cualquier
+    otro error queda también su tipo (por ejemplo, TimeoutError), que ayuda a reconocerlo.
+    """
+    lineas = [x.strip() for x in str(excepcion).splitlines() if x.strip()]
+    if isinstance(excepcion, AssertionError) and lineas:
+        # Después del mensaje de la verificación, pytest agrega su explicación ("assert ..."): no es lo obtenido.
+        corte = next((i for i, x in enumerate(lineas) if i and x.startswith("assert ")), len(lineas))
+        return " ".join(lineas[:corte])[:MAX_MOTIVO]
+    tipo = type(excepcion).__name__
+    return (f"{tipo}: {' '.join(lineas)}" if lineas else tipo)[:MAX_MOTIVO]
+
+
+def renglon(ok, paso, obtenido=""):
+    """Un renglón del comentario: "OK    paso" o "FALLA paso -> lo obtenido" (las mismas marcas de las pruebas Manual)."""
+    return f"  {'OK   ' if ok else 'FALLA'} {paso}" + (f" -> {obtenido}" if obtenido and not ok else "")
+
+
 class Recolector:
     """Resultados de las pruebas Cucumber de una corrida, por clave de Xray y en el orden en que se ejecutaron."""
 
@@ -56,19 +87,21 @@ class Recolector:
         fila = fila_de(item)
         prueba = self.pruebas.setdefault(clave, {
             "identificador": identificador(nombre), "esquema": bool(fila), "ejemplos": [],
-            "fallas": [], "faltantes": [], "evidencias": [], "start": ahora(), "finish": None})
-        ejemplo = {"nombre": fila or ESCENARIO, "status": "PASSED"}
+            "faltantes": [], "evidencias": [], "start": ahora(), "finish": None})
+        ejemplo = {"nombre": fila or ESCENARIO, "status": "PASSED", "renglones": []}
         prueba["ejemplos"].append(ejemplo)
         self._actual = (prueba, ejemplo)
 
     def pytest_bdd_before_scenario(self, request, feature, scenario):
         self._empezar(clave_de(scenario.tags), scenario.name, request.node)
 
+    def pytest_bdd_after_step(self, request, feature, scenario, step, step_func, step_func_args):
+        self._actual[1]["renglones"].append(renglon(True, step.name))
+
     def pytest_bdd_step_error(self, request, feature, scenario, step, step_func, step_func_args, exception):
         prueba, ejemplo = self._actual
         ejemplo["status"] = "FAILED"
-        prueba["fallas"].append(f"[{ejemplo['nombre']}] FALLA {step.keyword} {step.name} -> "
-                                f"{type(exception).__name__}: {str(exception).strip()[:300]}")
+        ejemplo["renglones"].append(renglon(False, step.name, motivo_de(exception)))
         self._captura(request, prueba, "falla")
 
     def pytest_bdd_step_func_lookup_error(self, request, feature, scenario, step, exception):
@@ -95,7 +128,7 @@ class Recolector:
             prueba, ejemplo = self._actual
             ejemplo["status"] = "FAILED"
             motivo = call.excinfo.exconly() if call.excinfo else reporte.longreprtext
-            prueba["fallas"].append(f"[{ejemplo['nombre']}] FALLA fuera de los pasos ({reporte.when}): {motivo.strip()[:300]}")
+            ejemplo["renglones"].append(renglon(False, f"fuera de los pasos ({reporte.when})", " ".join(motivo.split())[:MAX_MOTIVO]))
         return reporte
 
     # --- Evidencias -------------------------------------------------------------------
@@ -124,14 +157,15 @@ class Recolector:
 
     def _resultado(self, prueba, url, run_id):
         estado = self.estado(prueba)
-        lineas = list(prueba["fallas"])
+        lineas = []
         if prueba["faltantes"]:
             lineas.append("PASOS SIN CÓDIGO (la prueba queda en TODO hasta que se programen): " + "; ".join(prueba["faltantes"]))
-        lineas += [f"[{e['nombre']}] {e['status']}" for e in prueba["ejemplos"]]
+        for e in prueba["ejemplos"]:
+            lineas += [f"[{e['nombre']}]", *e["renglones"]]
         lineas.append(f"Ejecutado contra {url} con qa-ejecutor {__version__} (pytest-bdd y Playwright). run {run_id}.")
         r = {"identificador": prueba["identificador"], "tipo": "Cucumber", "status": estado, "comment": "\n".join(lineas),
              "start": prueba["start"], "finish": prueba["finish"] or prueba["start"], "evidencias": list(prueba["evidencias"])}
         # Estado por fila solo en los esquemas y si todas las filas se ejecutaron (xray-proxy acepta PASSED o FAILED).
         if prueba["esquema"] and estado != "TODO":
-            r["ejemplos"] = [dict(e) for e in prueba["ejemplos"]]
+            r["ejemplos"] = [{"nombre": e["nombre"], "status": e["status"]} for e in prueba["ejemplos"]]
         return r
