@@ -82,10 +82,15 @@ jobs:
 
       # Se usa el Python de la imagen: actions/setup-python no funciona dentro de un contenedor.
       # qa-ejecutor se instala desde el archivo de su versión en GitHub (no hace falta git en la imagen).
+      # Sin ruido en el registro: pip solo muestra errores, sin los avisos de "not on PATH" (todo se llama con
+      # python3 -m) ni el de una versión nueva de pip.
       - name: Instalar qa-ejecutor y las dependencias del proyecto
         run: |
-          python3 -m pip install --user --break-system-packages "qa-ejecutor @ https://github.com/${REPOSITORIO}/archive/${VERSION}.tar.gz"
-          if [[ -n "$REQUISITOS" ]]; then python3 -m pip install --user --break-system-packages -r "$REQUISITOS"; fi
+          instalar=(python3 -m pip install --user --break-system-packages --quiet --no-warn-script-location
+                    --disable-pip-version-check)
+          "${instalar[@]}" "qa-ejecutor @ https://github.com/${REPOSITORIO}/archive/${VERSION}.tar.gz"
+          if [[ -n "$REQUISITOS" ]]; then "${instalar[@]}" -r "$REQUISITOS"; fi
+          echo "Instalado: $(python3 -m pip show qa-ejecutor --disable-pip-version-check | grep -E '^(Name|Version):' | paste -sd ' ')"
 
       # Los secretos del proyecto (secrets: inherit) pasan como variables de entorno a los pasos siguientes de este
       # trabajo: así los pasos de cada proyecto leen los suyos (por ejemplo CLAVE_DEMO) sin que este flujo los nombre.

@@ -2,7 +2,7 @@
 import json
 import zipfile
 
-from qa_ejecutor import paquete
+from qa_ejecutor import __version__, paquete
 
 
 def test_zip_con_manifest_resultados_y_evidencias(tmp_path):
@@ -17,7 +17,7 @@ def test_zip_con_manifest_resultados_y_evidencias(tmp_path):
         assert sorted(zf.namelist()) == ["evidencias/a.png", "manifest.json", "resultados.json"]
         m = json.loads(zf.read("manifest.json"))
         assert (m["tipo"], m["historia"], m["proyecto"], m["run_id"]) == ("resultados", "DEMO-3", "DEMO", "bdd-20261112-1000-demo3")
-        assert m["version_prompt"] == "qa-ejecutor@0.1.2"
+        assert m["version_prompt"] == f"qa-ejecutor@{__version__}"
         tests = json.loads(zf.read("resultados.json"))["tests"]
         assert tests[0]["evidencias"] == ["a.png"]
         assert tests[1]["steps"][0]["evidencias"] == []
