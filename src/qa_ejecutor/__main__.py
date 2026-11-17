@@ -3,8 +3,11 @@ Ejecuta las pruebas de la Sub Test Execution abierta de una historia y envía lo
 
     python -m qa_ejecutor --historia QAPEC-3 --pasos e2e.pasos --url https://mi-aplicacion --xray-proxy https://xray-proxy
 
-Variables de entorno: XRAY_PROXY_API_KEY (obligatoria; nunca se escribe en archivos), APP_URL y XRAY_PROXY_URL
-(si no se pasan --url y --xray-proxy) y los secretos que usen los pasos del proyecto.
+Variables de entorno: XRAY_PROXY_API_KEY (obligatoria; nunca se escribe en archivos), APP_URL, XRAY_PROXY_URL y
+QA_NAVEGADOR (si no se pasan --url, --xray-proxy y --navegador) y los secretos que usen los pasos del proyecto.
+
+Las conexiones usan los certificados del sistema operativo (truststore), igual que el navegador: así funciona en redes
+que inspeccionan el tráfico cifrado con un certificado propio de la organización.
 """
 import argparse
 import datetime as dt
@@ -20,7 +23,7 @@ from pathlib import Path
 import pytest
 
 from qa_ejecutor import gherkin, manual
-from qa_ejecutor.navegador import navegador_de_la_corrida, pagina_limpia
+from qa_ejecutor.navegador import NAVEGADORES, navegador_de_la_corrida, navegador_por_omision, pagina_limpia
 from qa_ejecutor.paquete import empaquetar
 from qa_ejecutor.plugin import Recolector, ahora
 from qa_ejecutor.xray_proxy import ErrorDeXrayProxy, XrayProxy
@@ -34,9 +37,25 @@ def argumentos(argv=None):
     a.add_argument("--pasos", default="e2e.pasos", help="paquete de Python con los pasos del proyecto (por defecto e2e.pasos)")
     a.add_argument("--url", default=os.environ.get("APP_URL", ""), help="dirección de la aplicación que se prueba (o APP_URL)")
     a.add_argument("--xray-proxy", default=os.environ.get("XRAY_PROXY_URL", ""), help="dirección de xray-proxy (o XRAY_PROXY_URL)")
+    a.add_argument("--navegador", default=os.environ.get("QA_NAVEGADOR") or navegador_por_omision(),
+                   help="msedge, chrome o chromium (o QA_NAVEGADOR). Por omisión, Edge en Windows y Chromium en los demás; "
+                        "chromium requiere 'python -m playwright install chromium'")
     a.add_argument("--salida", default="resultados_e2e", help="carpeta donde queda el ZIP de resultados")
     a.add_argument("--sin-enviar", action="store_true", help="arma el ZIP y no lo envía (para revisar en local)")
     return a.parse_args(argv)
+
+
+def confiar_en_los_certificados_del_sistema():
+    """
+    Hace que Python use los certificados del sistema operativo, como el navegador (redes con inspección del tráfico
+    cifrado). Sin truststore instalado, se usan los certificados de Python.
+    """
+    try:
+        import truststore
+    except ImportError:
+        return False
+    truststore.inject_into_ssl()
+    return True
 
 
 def modulos_de_pasos(paquete):
@@ -106,7 +125,12 @@ def main(argv=None):
     if not args.url:
         print("Falta la dirección de la aplicación (--url o APP_URL)", file=sys.stderr)
         return 2
+    if args.navegador not in NAVEGADORES:
+        print(f"Navegador no soportado: {args.navegador!r} (usa {', '.join(NAVEGADORES)})", file=sys.stderr)
+        return 2
     os.environ["APP_URL"] = args.url
+    os.environ["QA_NAVEGADOR"] = args.navegador
+    confiar_en_los_certificados_del_sistema()
     try:
         proxy = XrayProxy(args.xray_proxy, os.environ.get("XRAY_PROXY_API_KEY", ""))
         proxy.despertar()

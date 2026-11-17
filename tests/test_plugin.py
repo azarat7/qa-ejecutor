@@ -46,7 +46,7 @@ def test_comentario_con_un_renglon_por_paso_de_cada_ejemplo(pytester):
         '  OK    un usuario activo con rol "Auditoría Interna"',
         "  OK    ingresa usuario y contraseña válidos",
         "  FALLA accede al portal -> sigue en la pantalla de inicio de sesión",
-        "Ejecutado contra https://app con qa-ejecutor 0.1.1 (pytest-bdd y Playwright). run bdd-1.",
+        "Ejecutado contra https://app con qa-ejecutor 0.1.2 (pytest-bdd y Playwright). run bdd-1.",
     ]
     assert r["TC-AUT-SES-02"]["comment"].splitlines()[0] == "[escenario]"
 
@@ -80,7 +80,7 @@ def test_paso_sin_codigo_deja_la_prueba_en_todo(pytester):
     assert "PASOS SIN CÓDIGO (la prueba queda en TODO hasta que se programen): When pasan 15 minutos sin actividad" in r["comment"]
     assert "ejemplos" not in r
     assert r["tipo"] == "Cucumber"
-    assert r["comment"].endswith("Ejecutado contra https://app con qa-ejecutor 0.1.1 (pytest-bdd y Playwright). run bdd-1.")
+    assert r["comment"].endswith("Ejecutado contra https://app con qa-ejecutor 0.1.2 (pytest-bdd y Playwright). run bdd-1.")
 
 
 def test_un_esquema_con_un_paso_sin_codigo_no_envia_filas(pytester):
