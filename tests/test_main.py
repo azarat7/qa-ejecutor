@@ -1,5 +1,6 @@
 """Pruebas de la línea de comandos: de la respuesta de xray-proxy al ZIP enviado."""
 import json
+import sys
 import zipfile
 
 import pytest
@@ -50,6 +51,12 @@ def proyecto(pytester, monkeypatch):
     monkeypatch.setenv("XRAY_PROXY_API_KEY", "clave")
     monkeypatch.setattr(cli, "navegador_de_la_corrida", lambda: __import__("contextlib").nullcontext(None))
     monkeypatch.setattr(cli, "pagina_limpia", lambda navegador: __import__("contextlib").nullcontext(None))
+    # Sin cambiar los certificados del proceso de pruebas: solo se registra que se pidió.
+    pytester.certificados = []
+    monkeypatch.setattr(cli, "confiar_en_los_certificados_del_sistema", lambda: pytester.certificados.append(True))
+    # main() escribe QA_NAVEGADOR en el entorno: se registra para que al terminar quede como estaba.
+    monkeypatch.setenv("QA_NAVEGADOR", "")
+    monkeypatch.delenv("QA_NAVEGADOR")
     ProxyFalso.enviados = []
     return pytester
 
@@ -93,7 +100,45 @@ def test_errores_de_xray_proxy(proyecto, monkeypatch, falla):
     assert ejecutar(monkeypatch, falla=falla) == 1
 
 
-@pytest.mark.parametrize("args", [["--historia", "demo"], ["--historia", "DEMO-3", "--url", ""]])
+@pytest.mark.parametrize("args", [["--historia", "demo"], ["--historia", "DEMO-3", "--url", ""],
+                                  ["--historia", "DEMO-3", "--url", "https://app", "--navegador", "firefox"]])
 def test_argumentos_invalidos(monkeypatch, args):
     monkeypatch.delenv("APP_URL", raising=False)
     assert cli.main(args) == 2
+
+
+def test_usa_los_certificados_del_sistema_y_el_navegador_elegido(proyecto, monkeypatch):
+    assert ejecutar(monkeypatch, "--navegador", "chrome", "--sin-enviar") == 0
+    assert proyecto.certificados == [True]
+    assert cli.os.environ["QA_NAVEGADOR"] == "chrome"
+
+
+def test_el_navegador_tambien_se_elige_con_la_variable(proyecto, monkeypatch):
+    monkeypatch.setenv("QA_NAVEGADOR", "chromium")
+    assert ejecutar(monkeypatch, "--sin-enviar") == 0
+    assert cli.os.environ["QA_NAVEGADOR"] == "chromium"
+
+
+def test_un_navegador_no_soportado_en_la_variable(monkeypatch, capsys):
+    monkeypatch.setenv("QA_NAVEGADOR", "firefox")
+    assert cli.main(["--historia", "DEMO-3", "--url", "https://app"]) == 2
+    assert "Navegador no soportado: 'firefox'" in capsys.readouterr().err
+
+
+class TruststoreFalso:
+    inyectado = False
+
+    @classmethod
+    def inject_into_ssl(cls):
+        cls.inyectado = True
+
+
+def test_confiar_en_los_certificados_del_sistema(monkeypatch):
+    monkeypatch.setitem(sys.modules, "truststore", TruststoreFalso)
+    assert cli.confiar_en_los_certificados_del_sistema() is True
+    assert TruststoreFalso.inyectado
+
+
+def test_sin_truststore_usa_los_certificados_de_python(monkeypatch):
+    monkeypatch.setitem(sys.modules, "truststore", None)   # import truststore lanza ImportError
+    assert cli.confiar_en_los_certificados_del_sistema() is False

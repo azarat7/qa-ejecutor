@@ -94,10 +94,10 @@ y su mensaje. **Dos pruebas que obtienen lo mismo tienen el mismo síntoma** y x
      contents: read
    jobs:
      pruebas:
-       uses: azarat7/qa-ejecutor/.github/workflows/ejecutar.yml@v0.1.1
+       uses: azarat7/qa-ejecutor/.github/workflows/ejecutar.yml@v0.1.2
        with:
          historia: ${{ inputs.historia }}
-         version: v0.1.1
+         version: v0.1.2
          url: ${{ vars.APP_URL }}
          xray-proxy-url: ${{ vars.XRAY_PROXY_URL }}
        secrets: inherit
@@ -108,14 +108,24 @@ y su mensaje. **Dos pruebas que obtienen lo mismo tienen el mismo síntoma** y x
 
 ## En local
 
-```bash
-pip install "qa-ejecutor @ https://github.com/azarat7/qa-ejecutor/archive/v0.1.1.tar.gz"
-python -m playwright install chromium
-export XRAY_PROXY_API_KEY=...   # nunca en archivos
-python -m qa_ejecutor --historia QAPEC-3 --url https://mi-aplicacion --xray-proxy https://xray-proxy --sin-enviar
+En Windows (PowerShell), desde la carpeta del proyecto:
+
+```powershell
+py -m venv .venv
+.venv\Scripts\python -m pip install "qa-ejecutor @ https://github.com/azarat7/qa-ejecutor/archive/v0.1.2.tar.gz"
+$env:XRAY_PROXY_API_KEY = Read-Host "Clave de xray-proxy"   # nunca en archivos
+.venv\Scripts\python -m qa_ejecutor --historia QAPEC-3 --url https://mi-aplicacion --xray-proxy https://xray-proxy --sin-enviar
 ```
 
-`QA_VISIBLE=1` muestra el navegador. Con `--sin-enviar` el ZIP queda en `resultados_e2e/` para revisarlo.
+En Linux o macOS: `python3 -m venv .venv`, `.venv/bin/pip install ...`, `python -m playwright install chromium` y
+`export XRAY_PROXY_API_KEY=...`.
+
+- **Navegador:** en Windows se usa Microsoft Edge, que ya viene instalado (no hay que descargar Chromium). `--navegador`
+  (o `QA_NAVEGADOR`) elige `msedge`, `chrome` o `chromium`; este último requiere `python -m playwright install chromium`.
+  En el flujo de GitHub Actions se usa el Chromium de la imagen.
+- **Certificados:** las conexiones usan los certificados del sistema operativo (`truststore`), igual que el navegador.
+  Así funciona en redes que inspeccionan el tráfico cifrado con un certificado propio de la organización.
+- `QA_VISIBLE=1` muestra el navegador. Con `--sin-enviar` el ZIP queda en `resultados_e2e/` para revisarlo.
 
 ## Desarrollo
 
@@ -125,5 +135,5 @@ ruff check
 pytest
 ```
 
-Versiones con etiquetas (`v0.1.1`); cada proyecto fija la suya y Dependabot avisa de las nuevas. La versión de
+Versiones con etiquetas (`v0.1.2`); cada proyecto fija la suya y Dependabot avisa de las nuevas. La versión de
 Playwright de `pyproject.toml` debe coincidir con la imagen del flujo (`mcr.microsoft.com/playwright/python`).
