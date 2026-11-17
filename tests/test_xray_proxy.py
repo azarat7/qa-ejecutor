@@ -71,6 +71,38 @@ def test_errores_de_xray_proxy(tmp_path):
     zip_.write_bytes(b"zip")
     proxy = XrayProxy("https://proxy", "clave", SesionFalsa([Respuesta(409, texto="sin Sub Test Execution"), Respuesta(400, texto="inválido")]))
     with pytest.raises(ErrorDeXrayProxy, match="HTTP 409: sin Sub Test Execution"):
-        proxy.gherkin("DEMO-3")
+        proxy.gherkin("DEMO-3", intentos=1)
     with pytest.raises(ErrorDeXrayProxy, match="HTTP 400"):
         proxy.enviar(zip_)
+
+
+def test_gherkin_reintenta_mientras_la_busqueda_de_jira_no_muestra_la_ejecucion(monkeypatch, capsys):
+    esperas = []
+    monkeypatch.setattr(xray_proxy.time, "sleep", esperas.append)
+    sesion = SesionFalsa([Respuesta(409, texto="sin Sub Test Execution")] * 2 + [Respuesta(200, {"features": []})])
+    assert XrayProxy("https://proxy", "clave", sesion).gherkin("DEMO-3") == {"features": []}
+    assert (len(sesion.llamadas), esperas) == (3, [15, 15])
+    salida = capsys.readouterr().out
+    assert "La Sub Test Execution de DEMO-3 aún no aparece en la búsqueda de Jira; reintento en 15 s (2 de 8)." in salida
+    assert "(3 de 8)" in salida
+
+
+def test_gherkin_se_rinde_si_la_ejecucion_no_aparece(monkeypatch):
+    monkeypatch.setattr(xray_proxy.time, "sleep", lambda s: None)
+    sesion = SesionFalsa([Respuesta(409, texto="DEMO-3 no tiene una Sub Test Execution abierta")] * 3)
+    with pytest.raises(ErrorDeXrayProxy, match="HTTP 409: DEMO-3 no tiene una Sub Test Execution abierta"):
+        XrayProxy("https://proxy", "clave", sesion).gherkin("DEMO-3", intentos=3)
+    assert len(sesion.llamadas) == 3
+
+
+def test_gherkin_no_reintenta_otros_errores(monkeypatch):
+    monkeypatch.setattr(xray_proxy.time, "sleep", lambda s: pytest.fail("no debe esperar"))
+    sesion = SesionFalsa([Respuesta(502, texto="Jira no responde")])
+    with pytest.raises(ErrorDeXrayProxy, match="HTTP 502"):
+        XrayProxy("https://proxy", "clave", sesion).gherkin("DEMO-3")
+    assert len(sesion.llamadas) == 1
+
+
+def test_gherkin_sin_intentos():
+    with pytest.raises(ErrorDeXrayProxy, match="intentos debe ser 1 o más"):
+        XrayProxy("https://proxy", "clave", SesionFalsa([])).gherkin("DEMO-3", intentos=0)

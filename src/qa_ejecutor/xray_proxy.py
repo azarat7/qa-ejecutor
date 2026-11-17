@@ -6,6 +6,7 @@ import requests
 
 TIMEOUT = 60
 TIMEOUT_ENVIO = 180
+SIN_EJECUCION = 409   # xray-proxy: la historia no tiene una Sub Test Execution abierta
 
 
 class ErrorDeXrayProxy(Exception):
@@ -34,12 +35,24 @@ class XrayProxy:
                 time.sleep(espera_s)
         raise ErrorDeXrayProxy(f"xray-proxy no respondió en {self.base}/health")
 
-    def gherkin(self, historia):
-        """El .feature de la Sub Test Execution abierta de la historia (GET /ejecucion/gherkin)."""
-        r = self.sesion.get(f"{self.base}/ejecucion/gherkin", params={"historia": historia}, timeout=TIMEOUT)
-        if not r.ok:
-            raise ErrorDeXrayProxy(f"/ejecucion/gherkin respondió HTTP {r.status_code}: {r.text[:300]}")
-        return r.json()
+    def gherkin(self, historia, intentos=8, espera_s=15):
+        """
+        El .feature de la Sub Test Execution abierta de la historia (GET /ejecucion/gherkin).
+
+        xray-proxy encuentra la Sub Test Execution con la búsqueda de Jira, que tarda en mostrar lo recién creado o
+        modificado: si la ejecución se lanzó apenas se creó, la primera respuesta puede ser 409 aunque exista. Por eso
+        el 409 se reintenta (por omisión, hasta unos 2 minutos); cualquier otro error falla de inmediato.
+        """
+        for intento in range(1, intentos + 1):
+            r = self.sesion.get(f"{self.base}/ejecucion/gherkin", params={"historia": historia}, timeout=TIMEOUT)
+            if r.ok:
+                return r.json()
+            if r.status_code != SIN_EJECUCION or intento == intentos:
+                raise ErrorDeXrayProxy(f"/ejecucion/gherkin respondió HTTP {r.status_code}: {r.text[:300]}")
+            print(f"La Sub Test Execution de {historia} aún no aparece en la búsqueda de Jira; reintento en {espera_s} s "
+                  f"({intento + 1} de {intentos}).", flush=True)
+            time.sleep(espera_s)
+        raise ErrorDeXrayProxy("intentos debe ser 1 o más")
 
     def enviar(self, ruta_zip):
         """Envía el paquete a /resultados/recibir. Devuelve la respuesta de xray-proxy (testExecution y enlace)."""

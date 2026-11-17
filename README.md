@@ -7,6 +7,8 @@ Preventiva con IA). Contenido de demostración, sin datos ni secretos. Todos los
 
 1. Pide a xray-proxy (`GET /ejecucion/gherkin?historia=...`) el `.feature` de las pruebas Cucumber de la Sub Test
    Execution abierta de la historia: **se ejecuta exactamente lo que QA programó en Xray**.
+   Si la Sub Test Execution se acaba de crear o mover, la búsqueda de Jira puede tardar en mostrarla: mientras xray-proxy
+   responda 409 ("no tiene una Sub Test Execution abierta"), se reintenta cada 15 segundos hasta unos 2 minutos.
 2. Lo ejecuta con pytest-bdd y Playwright, con los **pasos que escribe cada proyecto**.
 3. Prepara las pruebas Manual que el proyecto haya automatizado: el agente deja lo observado y las capturas en cada
    paso, en TODO; QA decide el estado (D-40).
@@ -94,10 +96,10 @@ y su mensaje. **Dos pruebas que obtienen lo mismo tienen el mismo síntoma** y x
      contents: read
    jobs:
      pruebas:
-       uses: azarat7/qa-ejecutor/.github/workflows/ejecutar.yml@v0.1.3
+       uses: azarat7/qa-ejecutor/.github/workflows/ejecutar.yml@v0.1.4
        with:
          historia: ${{ inputs.historia }}
-         version: v0.1.3
+         version: v0.1.4
          url: ${{ vars.APP_URL }}
          xray-proxy-url: ${{ vars.XRAY_PROXY_URL }}
        secrets: inherit
@@ -112,7 +114,7 @@ En Windows (PowerShell), desde la carpeta del proyecto:
 
 ```powershell
 py -m venv .venv
-.venv\Scripts\python -m pip install "qa-ejecutor @ https://github.com/azarat7/qa-ejecutor/archive/v0.1.3.tar.gz"
+.venv\Scripts\python -m pip install "qa-ejecutor @ https://github.com/azarat7/qa-ejecutor/archive/v0.1.4.tar.gz"
 $env:XRAY_PROXY_API_KEY = Read-Host "Clave de xray-proxy"   # nunca en archivos
 .venv\Scripts\python -m qa_ejecutor --historia QAPEC-3 --url https://mi-aplicacion --xray-proxy https://xray-proxy --sin-enviar
 ```
@@ -135,5 +137,5 @@ ruff check
 pytest
 ```
 
-Versiones con etiquetas (`v0.1.3`); cada proyecto fija la suya y Dependabot avisa de las nuevas. La versión de
+Versiones con etiquetas (`v0.1.4`); cada proyecto fija la suya y Dependabot avisa de las nuevas. La versión de
 Playwright de `pyproject.toml` debe coincidir con la imagen del flujo (`mcr.microsoft.com/playwright/python`).
