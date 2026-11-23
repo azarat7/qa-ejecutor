@@ -14,11 +14,11 @@ dependencies = [
     "pytest==9.2.0",
     "pytest-bdd==9.0.1",
     "requests==2.34.2",
-    "truststore==0.10.4",
+    "truststore==0.10.5",
 ]
 
 [project.optional-dependencies]
-dev = ["ruff==0.17.2"]
+dev = ["ruff==0.17.5"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
